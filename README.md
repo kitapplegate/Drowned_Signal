@@ -14,7 +14,7 @@ Your job is about to change.
 
 ## ▸ PLAY
 
-**[► JACK IN](https://kitapplegate.github.io/drowned-signal/)**
+**[► JACK IN](https://kitapplegate.github.io/Drowned-Signal/)**
 
 No install. No dependencies. One HTML file, any browser. Keyboard required.
 
