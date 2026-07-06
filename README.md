@@ -45,7 +45,3 @@ CCNA candidates: everything the switch tells you is real. Treat it
 like a lab. The lake is optional.
 ```
 ````
-
-Two things to swap in: replace `YOUR-USERNAME` in the play link with your actual GitHub username, and note the outer ```` ```markdown ```` fence is just for copying here — don't include that outermost fence when you paste.
-
-If you'd rather have an actual image banner at the top instead of ASCII (GitHub renders those nicely in embeds when the link gets shared), I can generate a green-phosphor SVG title card you'd upload to the repo alongside the game — just say the word.
