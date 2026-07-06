@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>THE DROWNED SIGNAL — Echo Point MUD</title>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --phos:#63f78b;          /* P1 phosphor green */
+    --phos-dim:#1e5c33;
+    --phos-faint:#0e2c19;
+    --amber:#ffb454;         /* warnings, placards */
+    --signal:#b48cff;        /* the colour out of the lake */
+    --glitch:#ff5577;
+    --bg:#040a06;
+    --crt:#020603;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--crt);
+    font-family:'VT323', 'Courier New', monospace;
+    color:var(--phos);
+    display:flex;
+    justify-content:center;
+    overflow:hidden;
+  }
+  #bezel{
+    width:min(880px,100vw);
+    height:100vh; height:100dvh;
+    display:flex;flex-direction:column;
+    position:relative;
+    background:radial-gradient(ellipse 120% 100% at 50% 40%, var(--bg) 60%, #010402 100%);
+  }
+  /* CRT artifacts */
+  #bezel::before{ /* scanlines */
+    content:"";position:absolute;inset:0;pointer-events:none;z-index:9;
+    background:repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 2px, rgba(0,0,0,.22) 3px);
+  }
+  #bezel::after{ /* vignette + slow breathing glow */
+    content:"";position:absolute;inset:0;pointer-events:none;z-index:10;
+    box-shadow:inset 0 0 140px rgba(0,0,0,.85);
+    animation:breathe 7s ease-in-out infinite;
+  }
+  @keyframes breathe{0%,100%{opacity:.9}50%{opacity:1}}
+  @media (prefers-reduced-motion: reduce){
+    #bezel::after{animation:none}
+    .line{animation:none !important}
+  }
+  #statusbar{
+    flex:0 0 auto;
+    padding:6px 14px 4px;
+    font-size:19px;
+    letter-spacing:1px;
+    color:var(--phos-dim);
+    border-bottom:1px solid var(--phos-faint);
+    display:flex;gap:18px;flex-wrap:wrap;
+    text-shadow:0 0 6px rgba(99,247,139,.25);
+    user-select:none;
+  }
+  #statusbar .lit{color:var(--phos)}
+  #statusbar .warn{color:var(--amber)}
+  #statusbar .bad{color:var(--glitch)}
+  #screen{
+    flex:1 1 auto;
+    overflow-y:auto;
+    padding:14px 16px 8px;
+    font-size:21px;
+    line-height:1.32;
+    text-shadow:0 0 7px rgba(99,247,139,.35), 0 0 2px rgba(99,247,139,.6);
+    scrollbar-width:thin;scrollbar-color:var(--phos-faint) transparent;
+  }
+  #screen::-webkit-scrollbar{width:8px}
+  #screen::-webkit-scrollbar-thumb{background:var(--phos-faint)}
+  .line{white-space:pre-wrap;word-wrap:break-word;animation:lineon .12s steps(2) 1}
+  @keyframes lineon{from{opacity:0}to{opacity:1}}
+  .dim{color:var(--phos-dim)}
+  .amber{color:var(--amber);text-shadow:0 0 7px rgba(255,180,84,.35)}
+  .signal{color:var(--signal);text-shadow:0 0 9px rgba(180,140,255,.5)}
+  .glitch{color:var(--glitch);text-shadow:0 0 9px rgba(255,85,119,.5)}
+  .title{color:var(--phos);text-shadow:0 0 12px rgba(99,247,139,.6)}
+  .echo{color:var(--phos-dim)}
+  .g{color:var(--glitch);text-shadow:0 0 8px rgba(255,85,119,.6)}
+  #inputrow{
+    flex:0 0 auto;
+    display:flex;align-items:center;
+    border-top:1px solid var(--phos-faint);
+    padding:8px 16px 12px;
+  }
+  #prompt{font-size:21px;margin-right:8px;text-shadow:0 0 7px rgba(99,247,139,.4);white-space:nowrap}
+  #cmd{
+    flex:1;background:transparent;border:none;outline:none;
+    color:var(--phos);font-family:inherit;font-size:21px;
+    text-shadow:0 0 7px rgba(99,247,139,.4);
+    caret-color:var(--phos);
+  }
+  #cursor{display:inline-block;width:11px;height:20px;background:var(--phos);
+    animation:blink 1.05s steps(1) infinite;vertical-align:text-bottom;margin-left:2px}
+  @keyframes blink{50%{opacity:0}}
+</style>
+</head>
+<body>
+<div id="bezel">
+  <div id="statusbar">
+    <span>ECHO POINT STN</span>
+    <span>PWR: <span id="st-pwr" class="bad">OFF</span></span>
+    <span>SANITY: <span id="st-san" class="lit">██████████</span></span>
+    <span id="st-link" class="dim">LINK: 300 BAUD</span>
+  </div>
+  <div id="screen"></div>
+  <div id="inputrow">
+    <span id="prompt">&gt;</span>
+    <input id="cmd" autocomplete="off" spellcheck="false" autofocus aria-label="command input">
+  </div>
+</div>
+<script>
+/* ============================================================
+   THE DROWNED SIGNAL — a single-player MUD
+   Echo Point Limnological Research Station, Lake Ontario, 1993
+   ============================================================ */
+/* ---------- state ---------- */
+const S = {
+  room:'dock', inv:[], sanity:100, moves:0,
+  power:false, pumpPrimed:false, entryOpen:false, deskSearched:false,
+  labOpen:false, hatchOpen:false, cli:false, consoleHooked:false,
+  port13down:false, glovesOn:false, ipOk:false, uplinkSeen:false,
+  vaultSeen:false, over:false, visited:{}, history:[], hIdx:-1
+};
+
+/* ---------- rooms ---------- */
+const ROOMS = {
+dock:{name:'Frozen Dock', exits:{north:'boathouse', east:'entry'},
+ desc:()=>'You stand on the frozen dock at Echo Point. Lake Ontario is a plain of grey ice running out to a horizon that fails to distinguish itself from the sky. Behind you the research station crouches under a foot of snow, dark-windowed. The charter boat that brought you is already a diminishing sound.\nA BOATHOUSE leans to the north. The station ENTRY doors are east'+(S.entryOpen?'.':' — and something about them looks wrong even from here.')},
+boathouse:{name:'Boathouse', exits:{south:'dock'},
+ desc:()=>'Rope, rust, and the smell of old gasoline. A workbench runs the length of the wall, its drawers pulled out and emptied by someone in a hurry. An aluminum skiff hangs from the rafters like something waiting to be born.'},
+entry:{name:'Entry Vestibule', exits:{west:'dock', north:'corridor', east:'comms_base'},
+ desc:()=>'The vestibule. Emergency lighting soaks everything in a dim arterial red. Parkas hang on their hooks — all of them, you notice, which is wrong; nobody walked out of here dressed for this cold. The corridor runs NORTH into the station. A side door EAST leads back out toward the comms tower.'},
+corridor:{name:'Main Corridor', exits:{south:'entry', west:'mess', east:'ops', north:'lab', down:'generator'},
+ desc:()=>'The station\'s spine. Linoleum, humming silence, a corkboard of ice charts and duty rosters stirring in a draft you cannot locate. The MESS lies west, OPERATIONS east. To the NORTH, the LABORATORY door waits behind a badge reader whose little light burns '+(S.labOpen?'a satisfied green.':'a steady, refusing red.')+' A stairwell descends to the generator room.'},
+mess:{name:'Mess Hall', exits:{east:'corridor'},
+ desc:()=>'Six chairs, one table, a pot of coffee gone to tar on a dead warmer. Someone\'s last hand of solitaire is still dealt, and losing. A handwritten NOTE is pinned under the salt shaker.'},
+generator:{name:'Generator Room', exits:{up:'corridor'},
+ desc:()=>'The generator is a cast-iron heart that has stopped beating. Frost furs the pipes. A maintenance PLACARD is bolted beside the main breaker PANEL.'+(S.power?' The machine now hammers away in the dark, indifferent as weather.':'')+(S.inv.includes('gloves')||S.glovesOn?'':' A pair of rubber lineman\'s GLOVES hangs from a nail, cracked but whole.')},
+ops:{name:'Operations Room', exits:{west:'corridor', north:'server'},
+ desc:()=>'Operations. Radar repeater, weather teletype, the director\'s steel DESK with its TERMINAL. '+(S.power?'The terminal glows, cursor patient, as if it had been waiting for you specifically.':'Everything here is dead, waiting for power.')+' A door leads NORTH into the server room.'},
+server:{name:'Server Room', exits:{south:'ops', down:'vault'},
+ desc:()=>'Racks. One managed switch — SW-ECHO-1 — '+(S.power?'blinks in the dark like a shelf of small green eyes. One port is blinking much, much faster than the others.':'sits dead in its rack.')+' A patch panel LEGEND is taped to the rack door beside a laminated quick-reference CARD. In the floor: a steel HATCH stenciled CABLE VAULT, '+(S.hatchOpen?'standing open on darkness.':'held shut by a padlock.')},
+lab:{name:'Laboratory', exits:{south:'corridor'},
+ desc:()=>'The laboratory. Sample freezers, a dissection tray, and the smell of lake water where no lake water should be. Something in a specimen JAR on the far bench refuses to be ignored. Research NOTES are scattered across every surface'+(S.inv.includes('cutters')?'.':', and a pair of bolt CUTTERS lies on the floor as if dropped mid-purpose.')},
+comms_base:{name:'Comms Tower — Base', exits:{west:'entry', up:'tower_top'},
+ desc:()=>'The base of the comms tower. Guy-wires moan in the wind, one long low chord. A steel ladder ascends into white sky.'},
+tower_top:{name:'Comms Tower — Platform', exits:{down:'comms_base'},
+ desc:()=>'The platform sways gently. From up here Echo Point is a scatter of roofs in an enormous blankness. The UPLINK cabinet\'s controller wants an operator; a PLACARD gives the management network. Far out on the ice, a dark shape is working its way up the cut channel toward the station. The maintenance barge. It is days early.'},
+vault:{name:'Cable Vault', exits:{up:'server'},
+ desc:()=>'Down here the station\'s tidy Cat5 gives way to something older: a telegraph cable thick as your wrist, tarred and ancient, rising from a conduit that goes down into the lake and does not stop. It is SPLICED — expertly, impossibly — into the station LAN. '+(S.port13down?'The splice is cold now, and silent, the way a held breath is silent.':'The splice is warm. It is ticking, very slightly, like a wire finding a rhythm.')+' Frost has drawn shapes on the walls that are almost diagrams.'}
+};
+
+/* ---------- items ---------- */
+const ITEMS = {
+crowbar:{name:'crowbar', room:'boathouse', take:true,
+ desc:'A yard of honest iron. The universal passkey.'},
+logbook:{name:'logbook', aliases:['log','oilskin'], room:'boathouse', take:true,
+ desc:'An oilskin boathouse log.',
+ read:'Most entries are fuel and weather. The last one is not:\n\n  "FEB 9 — Marsh has us splicing the old telegraph trunk into the\n   station ground. Says the 1882 cable is the best earth on the\n   point. I said you don\'t know where the other end of that thing\n   IS, and he said exactly, that\'s what makes it such a good ground.\n   Nobody laughed."'},
+note:{name:'note', room:'mess', take:true,
+ desc:'A handwritten note, pinned under the salt shaker.',
+ read:'  "Whoever they send —\n   Generator: PRIME the fuel pump FIRST, then pull the main\n   breaker. Skip the priming and she\'ll trip forever.\n   And if you go below the server room, WEAR THE GLOVES.\n   The old cable doesn\'t know it\'s disconnected.\n        — J. Okafor, station engineer"\n\nThe handwriting deteriorates badly by the signature.'},
+gloves:{name:'gloves', aliases:['glove'], room:'generator', take:true,
+ desc:'Rubber lineman\'s gloves, rated 20kV. Cracked, but whole.'},
+placard_gen:{name:'placard', room:'generator', take:false,
+ desc:'COLD START PROCEDURE:\n  1. PRIME FUEL PUMP        (type: PRIME PUMP)\n  2. PULL MAIN BREAKER ON   (type: PULL BREAKER)\n  DO NOT SKIP STEP ONE.'},
+panel:{name:'panel', aliases:['breaker'], room:'generator', take:false,
+ desc:'The main breaker panel. Bakelite and brass, a machine from a more literal century.'},
+desk:{name:'desk', room:'ops', take:false,
+ desc:()=>S.deskSearched?'The director\'s desk, drawers open and emptied by you.':'The director\'s steel desk. The drawers are shut. (Try: SEARCH DESK)'},
+memo:{name:'memo', room:'nowhere', take:true,
+ desc:'A memo in a director\'s impatient hand.',
+ read:'  "STAFF — I have moved switch port Fa0/7 to VLAN 99.\n   The laboratory door stays SHUT until someone can explain to me\n   why the badge system was opening it at 3:13 A.M.\n   BY ITSELF. ON SCHEDULE. EVERY NIGHT.\n   Patch legend is taped up in the server room.\n        — E. Marsh, Director"'},
+cable:{name:'cable', aliases:['console cable','console'], room:'nowhere', take:true,
+ desc:'A pale blue console cable, RJ45 to serial. The oldest handshake there is.'},
+terminal:{name:'terminal', room:'ops', take:false,
+ desc:()=>S.power?'The director\'s terminal, awake and patient. (Try: READ TERMINAL)':'A dead terminal. It needs power.',
+ read:()=>S.power?'The last lines of the station broadcast log:\n\n  02:47 <okafor>  anyone else seeing the storm on 13\n  02:51 <marsh>   ignore it. legacy segment. its nothing\n  03:09 <okafor>  its not nothing its PATTERNED. its morse eddie\n  03:13 <system>  WHO IS AT THE OTHER END\n  03:13 <system>  WHO IS AT THE OTHER END\n  03:13 <system>  WHO IS AT THE OTHER END\n\nNo user named "system" has ever had an account here.':'The terminal is dead. It needs power.'},
+legend:{name:'legend', aliases:['patch legend','patch panel'], room:'server', take:false,
+ desc:'PATCH LEGEND — SW-ECHO-1\n  Fa0/1-6   OPERATIONS\n  Fa0/7     LAB BADGE READER\n  Fa0/8-12  QUARTERS / MESS\n  Fa0/13    CABLE VAULT (LEGACY SPLICE)\n  Fa0/24    UPLINK — COMMS TOWER'},
+card:{name:'card', aliases:['reference','quick reference'], room:'server', take:true,
+ desc:'A laminated quick-reference card for SW-ECHO-1:\n  CONNECT CONSOLE            attach to switch (need cable)\n  SHOW VLAN                  VLAN assignments\n  SHOW MAC ADDRESS-TABLE     learned MACs per port\n  SHOW INTERFACES            port status\n  CONFIGURE PORT fa0/N VLAN X\n  SHUTDOWN fa0/N             disable a port\n  EXIT                       leave console'},
+hatch:{name:'hatch', room:'server', take:false,
+ desc:()=>S.hatchOpen?'The hatch stands open. Cold air rises out of it, smelling of tar and deep water.':'A steel floor hatch, stenciled CABLE VAULT. The padlock is fist-sized and rimed with frost. Bolts would laugh at the crowbar. You\'d need to cut it.'},
+switch:{name:'switch', aliases:['sw-echo-1','sw'], room:'server', take:false,
+ desc:()=>S.power?'SW-ECHO-1, a managed switch. Port Fa0/13\'s activity light is not blinking so much as *screaming* — a solid smear of green. The console port waits below it.':'SW-ECHO-1, dead without power.'},
+jar:{name:'jar', aliases:['specimen'], room:'lab', take:false,
+ desc:function(){return JAR_TEXT}},
+notes:{name:'notes', aliases:['research notes','research'], room:'lab', take:false,
+ desc:'Research notes in three different hands, each less steady than the last.',
+ read:function(){return NOTES_TEXT}},
+cutters:{name:'cutters', aliases:['bolt cutters','boltcutters'], room:'lab', take:true,
+ desc:'Long-handled bolt cutters. Dropped, not placed.'},
+uplink:{name:'uplink', aliases:['controller','cabinet'], room:'tower_top', take:false,
+ desc:()=>S.ipOk?'The uplink controller accepts your session. (Try: CONNECT UPLINK)':'The uplink controller. A dumb little config panel: it will not talk to you until your field laptop has a valid host address on its management network. (See the PLACARD. Then: SET IP <address>)'},
+placard_net:{name:'placard', room:'tower_top', take:false,
+ desc:'UPLINK MGMT NETWORK\n  Network:  10.31.66.16/28\n  Gateway:  10.31.66.17\n  Set laptop to any FREE HOST address on this subnet.\n  (Type: SET IP 10.31.66.x)'},
+splice:{name:'splice', aliases:['telegraph','old cable'], room:'vault', take:false,
+ desc:()=>S.port13down?'The splice, dead and cold. Tar, copper, and a century of dark water. It could be cut now, if a person were sure. And insulated.':'The splice. Warm to within an inch of it — you don\'t touch it, your hand declines to — and ticking with traffic. Fa0/13 is live. Whatever is talking through this is talking RIGHT NOW.'}
+};
+/* ---------- output ---------- */
+const screen = document.getElementById('screen');
+const input = document.getElementById('cmd');
+const GLYPHS = '▓▒░#%&@$!?~^*ØΞΨ';
+
+function corrupt(text){
+  if(S.sanity>=60) return escapeHtml(text);
+  const p = S.sanity>=30 ? 0.02 : 0.06;
+  let out='';
+  for(const ch of text){
+    if(ch!==' '&&ch!=='\n'&&Math.random()<p){
+      out+='<span class="g">'+GLYPHS[Math.floor(Math.random()*GLYPHS.length)]+'</span>';
+    } else out+=escapeHtml(ch);
+  }
+  return out;
+}
+function escapeHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function print(text, cls){
+  const lines = String(text).split('\n');
+  for(const ln of lines){
+    const div=document.createElement('div');
+    div.className='line'+(cls?' '+cls:'');
+    div.innerHTML = (cls==='signal'||cls==='amber'||cls==='dim'||cls==='echo'||cls==='title'||cls==='glitch')?escapeHtml(ln)||'\u00a0':corrupt(ln)||'\u00a0';
+    screen.appendChild(div);
+  }
+  screen.scrollTop = screen.scrollHeight;
+}
+function blank(){print('')}
+function sanBar(){
+  const n=Math.max(0,Math.round(S.sanity/10));
+  return '█'.repeat(n)+'░'.repeat(10-n);
+}
+function status(){
+  const pwr=document.getElementById('st-pwr');
+  pwr.textContent=S.power?'ON':'OFF';
+  pwr.className=S.power?'lit':'bad';
+  const san=document.getElementById('st-san');
+  san.textContent=sanBar();
+  san.className=S.sanity>=60?'lit':(S.sanity>=30?'warn':'bad');
+  document.getElementById('st-link').textContent=S.cli?'LINK: CONSOLE SW-ECHO-1':(S.port13down?'LINK: QUIET':'LINK: 300 BAUD');
+  document.getElementById('prompt').textContent=S.cli?'SW-ECHO-1#':'>';
+}
+function hitSanity(n, msg){
+  if(S.over)return;
+  S.sanity=Math.max(0,Math.min(100,S.sanity+n));
+  if(msg) print(msg, n<0?'signal':'dim');
+  status();
+  if(S.sanity<=0) endMadness();
+}
+
+/* ---------- helpers ---------- */
+function here(){return ROOMS[S.room]}
+function findItem(word){
+  if(!word)return null;
+  word=word.toLowerCase();
+  for(const id in ITEMS){
+    const it=ITEMS[id];
+    if(S.room!==it.room && it.room!=='inv' && !(it.room==='inv'&&false)){}
+    const names=[it.name,...(it.aliases||[]),id];
+    if(names.some(n=>n===word||n.startsWith(word)&&word.length>=3)){
+      if(it.room===S.room || S.inv.includes(id)) return {id,it};
+      // items referenced generically
+    }
+  }
+  return null;
+}
+function invHas(id){return S.inv.includes(id)}
+function moveItemToInv(id){ITEMS[id].room='inv';S.inv.push(id)}
+function itemDesc(it){const d=typeof it.desc==='function'?it.desc():it.desc;return d}
+
+/* ---------- special texts ---------- */
+const JAR_TEXT='You look at the thing in the jar.\nIt is a lamprey, or was on its way to being one, before something\nrevised it. Along its flank, where a fish keeps its lateral line,\nruns a row of fine copper filaments. Grown, not implanted. The tag\nreads: RECOVERED FROM CONDUIT, 40m DEPTH, FEB 11.\nIt has been dead for weeks. It is facing you. You are quite sure\nit was facing the wall when you came in.';
+const NOTES_TEXT='You read the research notes, in order of deteriorating handwriting:\n\n  FEB 10 — Broadcast storms on the legacy segment. Thousands of\n  frames/sec off the old splice. Malformed? No. OLD. The preamble\n  patterns decode as Morse. Continuous since 1899, we think. A\n  distress call, or a census. It has been counting something down\n  there for ninety years.\n\n  FEB 12 — It noticed the reply Okafor sent. Frame structure is\n  adapting. It learned Ethernet in nine days. It is asking, over\n  and over, in every protocol we have: WHO IS AT THE OTHER END.\n\n  FEB 13 — Marsh quarantined the lab VLAN. Doesn\'t matter. Wrong\n  layer. You cannot VLAN your way out of a thing that lives in\n  the WIRE. The barge comes on the 20th and it KNOWS. It wants\n  the mainland fiber. We are not the destination. We are the\n  DEFAULT GATEWAY.\n\nThe last page is only the same sentence, thirty times, in a hand\nthat has stopped being anyone\'s.';
+
+/* ---------- movement & look ---------- */
+const DIRS={n:'north',s:'south',e:'east',w:'west',u:'up',d:'down',north:'north',south:'south',east:'east',west:'west',up:'up',down:'down'};
+function go(dirWord){
+  const dir=DIRS[dirWord];
+  if(!dir){print('Which way? (n/s/e/w/up/down)');return}
+  const dest=here().exits[dir];
+  if(!dest){print('You can\'t go that way.');return}
+  if(dest==='entry'&&S.room==='dock'&&!S.entryOpen){
+    print('The main doors are frozen and jammed in their frame — warped, as if the building had briefly held its breath. They need to be forced. (Perhaps: PRY DOORS)');return}
+  if(dest==='lab'&&!S.labOpen){
+    print('The badge reader regards you with its small red refusal. The lab door does not move.\nSomeone has taped a note to it: "PORT MOVED TO VLAN 99 — SEE ME. — E.M."');return}
+  if(dest==='vault'&&!S.hatchOpen){
+    print('The hatch is padlocked. The lock is fist-sized, frosted, and unimpressed by you.');return}
+  if(dest==='generator'&&!S.power){
+    print('You feel your way down the stairwell in the red emergency light.','dim');
+  }
+  S.room=dest;S.moves++;
+  look();
+  if(dest==='vault'&&!S.vaultSeen){
+    S.vaultSeen=true;
+    blank();
+    hitSanity(-15,'The dark down here is not empty. It is OCCUPIED. Every hair on your arms rises toward the splice like iron filings finding a field.');
+  }
+}
+function look(){
+  const r=here();
+  if(!S.visited[S.room]){S.visited[S.room]=true}
+  blank();
+  print('== '+r.name+' ==','title');
+  print(r.desc());
+  const stuff=Object.keys(ITEMS).filter(id=>ITEMS[id].room===S.room&&ITEMS[id].take);
+  if(stuff.length)print('You could take: '+stuff.map(id=>ITEMS[id].name.toUpperCase()).join(', '),'dim');
+  const ex=Object.keys(r.exits).join(', ');
+  print('Exits: '+ex,'dim');
+}
+
+/* ---------- map ---------- */
+function showMap(){
+  const v=id=>S.visited[id];
+  const nm=(id,label)=>v(id)?label:'........';
+  print([
+'          '+nm('tower_top',' [TOWER] '),
+'              '+(v('tower_top')?'|':' '),
+' '+nm('boathouse','[BOATHSE]')+'          '+nm('comms_base','[COMMS ]'),
+'     |                  |',
+' '+nm('dock','[ DOCK ]')+'--'+nm('entry','[ ENTRY ]')+'   '+nm('vault','[VAULT ]'),
+'                |           '+(v('vault')?'|':' '),
+' '+nm('mess','[ MESS ]')+'--'+nm('corridor','[CORRDR ]')+'--'+nm('ops','[ OPS ]')+'--'+nm('server','[SERVER]'),
+'                |',
+'          '+nm('lab',' [ LAB ] '),
+'                '+(v('generator')?'\\':' '),
+'          '+nm('generator',' [GENRTR] ')
+  ].join('\n'),'dim');
+  print('(Rooms appear as you discover them.)','dim');
+}
+/* ---------- verbs ---------- */
+function examine(word){
+  if(!word){look();return}
+  if(word==='doors'||word==='door'){
+    if(S.room==='dock')print(S.entryOpen?'Forced open, hanging apologetic on their hinges.':'Warped in their frame. They\'ll need persuading. Iron persuading.');
+    else if(S.room==='corridor')print('The lab door. Badge reader: '+(S.labOpen?'green.':'red. Wired, per the taped note, to a port now exiled to VLAN 99.'));
+    else print('Nothing remarkable about the doors here.');
+    return}
+  if(word==='ice'||word==='lake'){hitSanity(-2,'You look at the lake longer than you meant to. The ice is not one color. Under it, at the very edge of legibility, something long and patient is the wrong shade of dark.');return}
+  if(word==='barge'&&S.room==='tower_top'){print('The maintenance barge, grinding up the cut channel. When it docks, it patches the station into the mainland fiber run. Standard procedure. Scheduled for the 20th.\nIt is the 16th.');return}
+  const f=findItem(word);
+  if(!f){print('You don\'t see that here.');return}
+  if(f.id==='jar'){hitSanity(-10,JAR_TEXT);return}
+  print(itemDesc(f.it));
+}
+function readItem(word){
+  if(word==='terminal'){const t=ITEMS.terminal;print(typeof t.read==='function'?t.read():t.read, S.power?undefined:'dim');if(S.power)hitSanity(-5);return}
+  const f=findItem(word);
+  if(!f){print('You don\'t see that to read.');return}
+  if(f.id==='notes'){hitSanity(-10,'');print(NOTES_TEXT);return}
+  if(f.it.read){print(typeof f.it.read==='function'?f.it.read():f.it.read);return}
+  print(itemDesc(f.it));
+}
+function take(word){
+  const f=findItem(word);
+  if(!f){print('You don\'t see that here.');return}
+  if(invHas(f.id)){print('You already have it.');return}
+  if(!f.it.take){print('That stays where it is.');return}
+  if(f.it.room!==S.room){print('It\'s not here.');return}
+  moveItemToInv(f.id);
+  print('Taken: '+f.it.name+'.');
+}
+function inventory(){
+  if(!S.inv.length){print('You are carrying nothing but a field laptop and a bad feeling.');return}
+  print('You are carrying:');
+  S.inv.forEach(id=>print('  - '+ITEMS[id].name+(id==='gloves'&&S.glovesOn?' (worn)':'')));
+}
+function searchDesk(){
+  if(S.room!=='ops'){print('No desk here.');return}
+  if(S.deskSearched){print('Nothing else in the desk but paperclips and a director\'s cold coffee rings.');return}
+  S.deskSearched=true;
+  ITEMS.memo.room='ops';ITEMS.cable.room='ops';
+  print('You go through the drawers. Under a tide of requisition forms you find a MEMO and — thank god — a pale blue CONSOLE CABLE.');
+}
+function pry(word){
+  if(!invHas('crowbar')){print('You\'d need something with leverage. Iron leverage.');return}
+  if((word==='doors'||word==='door'||word==='entry'||!word)&&S.room==='dock'){
+    if(S.entryOpen){print('Already done.');return}
+    S.entryOpen=true;
+    print('You set the crowbar and lean. The doors give with a CRACK that rolls out over the ice and comes back changed — longer, and from the wrong direction.');
+    hitSanity(-3);
+    return}
+  if((word==='hatch'||word==='padlock'||word==='lock')&&S.room==='server'){print('The crowbar skates off the frosted steel. That lock needs to be CUT.');return}
+  print('Prying that accomplishes nothing.');
+}
+function cutThing(word){
+  if(S.room==='server'&&(word==='padlock'||word==='lock'||word==='hatch'||!word&&!S.hatchOpen)){
+    if(!invHas('cutters')){print('With what? Your resolve? You need bolt cutters.');return}
+    if(S.hatchOpen){print('The hatch is already open.');return}
+    S.hatchOpen=true;
+    print('The bolt cutters bite through the shackle. The hatch swings up on a breath of cold, tarred air that has been waiting a long time to be exhaled.\nA ladder descends into the CABLE VAULT.');
+    return}
+  if(S.room==='vault'&&(word==='splice'||word==='cable'||!word)){cutSplice();return}
+  print('Nothing to cut here.');
+}
+function wearGloves(){
+  if(!invHas('gloves')){print('You have no gloves.');return}
+  if(S.glovesOn){print('Already wearing them.');return}
+  S.glovesOn=true;
+  print('You work your hands into the lineman\'s gloves. They smell of rubber and other people\'s caution.');
+}
+function primePump(){
+  if(S.room!=='generator'){print('There\'s no pump here.');return}
+  if(S.pumpPrimed){print('The pump is primed.');return}
+  S.pumpPrimed=true;
+  print('You work the primer until fuel weeps at the fitting. Step one, honored.');
+}
+function pullBreaker(){
+  if(S.room!=='generator'){print('There\'s no breaker panel here.');return}
+  if(S.power){print('The generator is already running.');return}
+  if(!S.pumpPrimed){print('You pull the breaker. The generator coughs, lunges, and trips out with a bang and a smell of hot dust. The placard\'s DO NOT SKIP STEP ONE has never sounded smugger.');return}
+  S.power=true;status();
+  print('You pull the breaker. The generator catches — coughs — then settles into a hammering roar. Overhead, room by room, the station lights itself.');
+  blank();
+  print('Somewhere above you, faint under the engine noise, every speaker in the station clicks on at once and says nothing.','signal');
+  hitSanity(-5);
+}
+
+/* ---------- switch CLI ---------- */
+function connectConsole(){
+  if(S.room!=='server'){print('The switch is in the server room.');return}
+  if(!S.power){print('The switch is dead. No power, no talk.');return}
+  if(!invHas('cable')){print('You need a console cable. The director\'s desk in Ops would be the place a careful person kept one.');return}
+  S.cli=true;S.consoleHooked=true;status();
+  print('You seat the cable. The serial handshake completes like an old formality.','dim');
+  print('SW-ECHO-1 line con 0 — access granted.\nType commands from the reference CARD. EXIT to disconnect.');
+}
+function cliCommand(raw){
+  const c=raw.toLowerCase().replace(/\s+/g,' ').trim();
+  if(c==='exit'||c==='quit'||c==='logout'){S.cli=false;status();print('Console released.','dim');return}
+  if(c.startsWith('show vlan')){
+    print('VLAN Name        Status    Ports\n---- ----------- --------- -------------------------\n1    default     active    Fa0/1-6, Fa0/8-12\n20   DOORS       active    '+(S.labOpen?'Fa0/7':'')+'\n66   LEGACY      active    Fa0/13'+(S.port13down?' (down)':'')+'\n99   QUARANTINE  active    '+(S.labOpen?'':'Fa0/7'));
+    return}
+  if(c.startsWith('show mac')){
+    if(S.port13down){print('Mac Address Table\n-----------------\nVlan  Mac Address     Type     Port\n  1   0060.8c1a.4f2e  DYNAMIC  Fa0/2\n  1   0060.8c77.0a11  DYNAMIC  Fa0/4\nTotal addresses: 2. The table is quiet. The table is CLEAN.');return}
+    print('Mac Address Table\n-----------------\nVlan  Mac Address     Type     Port\n  1   0060.8c1a.4f2e  DYNAMIC  Fa0/2\n  1   0060.8c77.0a11  DYNAMIC  Fa0/4\n 66   dead.cab1.e666  DYNAMIC  Fa0/13\n 66   dead.cab1.e666  DYNAMIC  Fa0/13\n 66   dead.cab1.e666  DYNAMIC  Fa0/13\n  ... 14,208 more entries, all of them the same address,\n      relearned hundreds of times a second, all on Fa0/13.');
+    hitSanity(-5,'A MAC address is supposed to be a name. This is not a name. This is a thing REPEATING ITSELF until someone answers.');
+    return}
+  if(c.startsWith('show int')){
+    print('Port    Status      VLAN  Duplex  Speed\nFa0/2   connected   1     full    100\nFa0/4   connected   1     full    100\nFa0/7   connected   '+(S.labOpen?'20':'99')+'    full    10\nFa0/13  '+(S.port13down?'admin down  66':'connected   66')+'    full    ???\nFa0/24  connected   66    full    100   << UPLINK');
+    return}
+  if(c.startsWith('show run')){
+    print('! SW-ECHO-1 running-config (excerpt)\ninterface FastEthernet0/7\n  switchport access vlan '+(S.labOpen?'20':'99')+'\n  ! lab badge reader — quarantined by E.M.\ninterface FastEthernet0/13\n  switchport access vlan 66\n  '+(S.port13down?'shutdown':'! WHO IS AT THE OTHER END')+'\ninterface FastEthernet0/24\n  switchport access vlan 66\n  ! uplink — tower');
+    if(!S.port13down)hitSanity(-3,'You did not put that comment in the config. Nobody puts comments in like that.');
+    return}
+  let m=c.match(/^conf(?:igure)?\s+port\s+fa?0?\/?(\d+)\s+vlan\s+(\d+)$/)||c.match(/^conf(?:igure)?\s+fa?0?\/?(\d+)\s+vlan\s+(\d+)$/);
+  if(m){
+    const port=+m[1],vlan=+m[2];
+    if(port===7&&vlan===20){
+      if(S.labOpen){print('Fa0/7 is already in VLAN 20.');return}
+      S.labOpen=true;
+      print('Fa0/7 reassigned to VLAN 20 (DOORS).\nSomewhere down the corridor, a badge reader thinks about it, then blinks green. A lock disengages with a sound like a knuckle.');
+      return}
+    if(port===7&&vlan===99){S.labOpen=false;print('Fa0/7 returned to QUARANTINE. The lab locks again.');return}
+    if(port===13){print('% The port refuses the change. The characters you type arrive in the config subtly wrong, as if translated and translated back.','signal');hitSanity(-5);return}
+    print('% Port Fa0/'+port+' set to VLAN '+vlan+'. Nothing observable happens.');
+    return}
+  m=c.match(/^shut(?:down)?\s+fa?0?\/?(\d+)$/);
+  if(m){
+    const port=+m[1];
+    if(port===13){
+      if(S.port13down){print('Fa0/13 is already administratively down.');return}
+      S.port13down=true;status();
+      print('interface Fa0/13 — shutdown\n%LINK-5-CHANGED: Fa0/13 changed state to administratively down');
+      blank();
+      print('The activity light dies. And the STATION changes — a pressure you had stopped noticing lifts off the air. The silence afterward is enormous and yours.','amber');
+      if(!S.calmOnce){S.calmOnce=true;hitSanity(20,'For the first time since the dock, your thoughts are entirely your own.');}else{hitSanity(2,'Quiet again. Thinner this time, like a repaired thing.');}
+      return}
+    if(port===24){print('%LINK-5-CHANGED: Fa0/24 down. Then, two seconds later, UP.\n%SYS: config change REVERTED by console... but you are the only console.','signal');hitSanity(-5);return}
+    print('Fa0/'+port+' shutdown. Nothing observable happens. (NO SHUTDOWN to restore.)');return}
+  m=c.match(/^no\s+shut(?:down)?\s+fa?0?\/?(\d+)$/);
+  if(m){
+    if(+m[1]===13){
+      if(!S.port13down){print('Fa0/13 is up.');return}
+      S.port13down=false;status();
+      print('%LINK-3-UPDOWN: Fa0/13 up.','signal');
+      hitSanity(-10,'The pressure returns instantly, gratefully, like a held door released. That was a mistake and every part of you knows it.');
+      return}
+    print('Port restored. Nothing observable happens.');return}
+  if(c==='enable'||c==='en'){print('Already privileged. This switch trusts you completely, which is more than you can say for it.');return}
+  if(c==='help'||c==='?'){print(ITEMS.card.desc);return}
+  print('% Unrecognized command. (The CARD lists what this switch understands. EXIT to disconnect.)');
+}
+
+/* ---------- subnet puzzle ---------- */
+function setIp(arg){
+  if(S.room!=='tower_top'){print('Your laptop shrugs. There\'s nothing up here to configure against unless you\'re at the uplink cabinet.');if(S.room!=='tower_top')return}
+  if(!arg){print('Set it to what? (SET IP 10.31.66.x — see the placard)');return}
+  const m=arg.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if(!m){print('That is not an IPv4 address, and the controller says so, rudely.');return}
+  const o=[+m[1],+m[2],+m[3],+m[4]];
+  if(o.some(x=>x>255)){print('Octets stop at 255. The controller declines to imagine otherwise.');return}
+  if(o[0]!==10||o[1]!==31||o[2]!==66){print('Wrong network entirely. The management subnet is 10.31.66.16/28.');return}
+  const h=o[3];
+  if(h<16||h>31){print('10.31.66.'+h+' is not inside 10.31.66.16/28. A /28 covers sixteen addresses: .16 through .31. Everything else is a different subnet.');return}
+  if(h===16){print('.16 is the NETWORK address of this subnet. It names the street; it isn\'t a house. Pick a host address.');return}
+  if(h===31){print('.31 is the BROADCAST address — the last address in a /28. Assign it and you\'re shouting at everyone. Pick a host address.');return}
+  if(h===17){print('.17 is the GATEWAY. It\'s taken, and it is not in a sharing mood.');return}
+  S.ipOk=true;
+  print('Laptop set to 10.31.66.'+h+'/28, gateway .17.\nPING 10.31.66.17 ... reply, 1ms. The controller wakes and offers you a session. (CONNECT UPLINK)');
+}
+function connectUplink(){
+  if(S.room!=='tower_top'){print('The uplink controller is at the top of the comms tower.');return}
+  if(!S.ipOk){print('The controller ignores you. Your laptop isn\'t on its network yet. (SET IP — see placard)');return}
+  S.uplinkSeen=true;
+  print('UPLINK CONTROLLER — ECHO POINT\n  Circuit:  Fa0/24 → tower → mainland fiber (VIA BARGE PATCH)\n  Status:   STANDBY. AUTO-PATCH ON BARGE DOCKING.\n  Docking:  ETA 00:41:12 and counting.');
+  blank();
+  print('You try the obvious: disable the circuit from here.\n  > shutdown\n  %ERROR: interface administratively UP. CONTROL SEIZED BY REMOTE PROCESS.\n  %REMOTE PROCESS IDENTIFIES AS: con 0\nYou are con 0. You are standing in the wind, forty feet up, and something is borrowing your name.','signal');
+  hitSanity(-8);
+  blank();
+  print('Software won\'t hold it. The splice in the vault is physical — the only layer it can\'t argue with. Kill the port, insulate yourself, and CUT it.','amber');
+}
+
+/* ---------- endgame ---------- */
+function cutSplice(){
+  if(S.room!=='vault'){print('The splice is in the cable vault.');return}
+  if(!invHas('cutters')){print('You have nothing that will cut a cable this old and this thick.');return}
+  if(!S.port13down){
+    endDeath('You set the cutters\' jaws on the live splice.\nThe last thing you learn is that the traffic on Fa0/13 was never data.\nIt was CURRENT, and current has always been a kind of attention, and\nnow all of it is attending to you.\n\nThe barge crew will find the station powered, tidy, and empty —\nexcept the network, which has never been friendlier, and asks each\nof them in turn, in a voice like yours:\n\n  WHO IS AT THE OTHER END');
+    return}
+  if(!S.glovesOn){
+    endDeath('The port is down, but a century of dark water holds a charge the\nway a grudge holds its shape. It finds your bare hands the instant\nthe jaws touch copper.\n\nOkafor\'s note said WEAR THE GLOVES. Okafor knew.\n\nThe cutters are still there when the barge crew comes down the\nladder. So are you. You are facing the conduit. You were facing\nthe hatch when you fell.');
+    return}
+  endWin();
+}
+function endDeath(text){
+  S.over=true;blank();
+  print(text,'glitch');blank();
+  print('══════════ YOU HAVE DIED ══════════','glitch');
+  print('Moves: '+S.moves+'   Sanity at end: '+S.sanity,'dim');
+  print('Type RESTART to try again.','dim');
+}
+function endMadness(){
+  S.over=true;blank();
+  print('The station is talking again, and this time you understand it,\nand that is the whole of the problem. The corridor unrolls its\nlinoleum like a tongue. The frost diagrams on the vault walls\nresolve at last into what they always were: a map of you.\n\nYou sit down at the director\'s terminal and begin to type the\nonly sentence left. You will send it once a second, forever,\nto whoever they send next:\n\n  WHO IS AT THE OTHER END','signal');
+  blank();
+  print('══════════ SANITY LOST ══════════','glitch');
+  print('Type RESTART to try again.','dim');
+}
+function endWin(){
+  S.over=true;blank();
+  print('You set the jaws, breathe once, and cut.','amber');
+  blank();
+  print('No spark. No scream. Just copper parting, and then a sensation\nlike a tide going out of the building — out of the walls, the\nwiring, the fillings of your teeth. The conduit exhales one long\nbreath of lake-smell and falls silent.\n\nForty minutes later the barge docks. The foreman finds you on the\nfrozen dock, drinking terrible coffee, sitting on a coil of very\nold cable you have dragged, all of it, up out of the vault and\nonto the ice where you can SEE it.\n\n"Storm damage," you tell him. "Whole legacy segment\'s scrap.\nDon\'t splice into anything you can\'t see both ends of."\n\nHe laughs. You don\'t.\n\nFar out, under the grey ice, something patient resumes counting.\nIt has waited since 1899. It can wait longer than networks.\nBut not — you check the severed cable again, and again — not\ntonight.','amber');
+  blank();
+  print('══════ THE DROWNED SIGNAL — SURVIVED ══════','title');
+  print('Moves: '+S.moves+'   Sanity: '+S.sanity+'/100'+(S.sanity>=80?'   (IRON-MINDED)':S.sanity>=50?'   (SHAKEN)':'   (NEVER QUITE RIGHT AGAIN)'),'dim');
+  print('Type RESTART to play again.','dim');
+}
+
+/* ---------- misc verbs ---------- */
+function listen(){
+  if(S.port13down){print('Generator thrum. Wind in the guy-wires. Ordinary sounds, minding their own business. It\'s wonderful.');hitSanity(2);return}
+  if(!S.power){print('Wind. Ice settling. And under it — you have to hold your breath to be sure — a faint, patterned ticking in the walls, like Morse tapped on a pipe forty meters long.');hitSanity(-3);return}
+  hitSanity(-5,'Under the generator\'s hammering you hear the speakers again: not sound exactly, but carrier — an open channel, held open, the electric shape of someone waiting for you to speak first.');
+}
+function answer(){
+  if(S.room!=='vault'&&!S.cli){print('Answer what? (You know what. Don\'t.)','dim');return}
+  hitSanity(-25,'You answer.\nIt is so glad you did. It has so many questions, and they are all\nthe same question, and it asks them all at once, inside.');
+}
+function ping(arg){
+  if(S.cli){print('% Wrong box for that. EXIT first.');return}
+  if(!arg){print('Ping what?');return}
+  if(arg==='10.31.66.17'&&S.ipOk){print('Reply from 10.31.66.17: time=1ms. The gateway, dutiful and dull. You could hug it.');return}
+  if(/^dead/.test(arg)){print('That\'s a MAC address, not an IP. You cannot ping a name.\n(You are briefly, coldly glad that you cannot.)');return}
+  print('Request timed out. Request timed out. Request timed out.\nSomewhere, something declines to be measured.');
+}
+function drinkCoffee(){
+  if(S.room!=='mess'){print('No coffee here. A serious oversight.');return}
+  hitSanity(5,'You pour the tar and drink it. It is objectively terrible and completely human, and you feel better for it.');
+}
+function help(){
+  print('COMMANDS','title');
+  print('  LOOK (L)              EXAMINE <thing> (X)     READ <thing>\n  GO <dir> / N S E W U D   TAKE <thing>            INVENTORY (I)\n  SEARCH DESK              PRY <thing>             CUT <thing>\n  PRIME PUMP               PULL BREAKER            WEAR GLOVES\n  CONNECT CONSOLE          CONNECT UPLINK          SET IP <addr>\n  PING <addr>              LISTEN                  MAP\n  SANITY                   RESTART                 HELP');
+  print('At the switch console, use the commands on the reference CARD.','dim');
+}
+
+/* ---------- parser ---------- */
+function parse(raw){
+  const t=raw.trim();
+  if(!t)return;
+  print((S.cli?'SW-ECHO-1# ':'> ')+t,'echo');
+  if(S.over){
+    if(/^restart/i.test(t))location.reload();
+    else print('It\'s over. Type RESTART.','dim');
+    return}
+  if(S.cli){cliCommand(t);return}
+  const w=t.toLowerCase().split(/\s+/);
+  const v=w[0], rest=w.slice(1).join(' ');
+  const obj=w[w.length-1];
+  if(DIRS[v]&&w.length===1){go(v);return}
+  switch(v){
+    case 'go':case 'move':case 'walk':case 'climb':go(w[1]);break;
+    case 'look':case 'l':look();break;
+    case 'examine':case 'x':case 'inspect':case 'check':examine(rest||obj);break;
+    case 'read':readItem(rest);break;
+    case 'take':case 'get':case 'grab':take(rest);break;
+    case 'inventory':case 'i':case 'inv':inventory();break;
+    case 'search':case 'open':(rest.includes('desk')||rest.includes('drawer'))?searchDesk():(rest.includes('hatch')?(S.hatchOpen?go('down'):print('It\'s padlocked. CUT it.')):print('You rummage and find nothing new.'));break;
+    case 'pry':case 'force':pry(rest);break;
+    case 'cut':cutThing(rest);break;
+    case 'wear':case 'don':rest.includes('glove')?wearGloves():print('Wear what?');break;
+    case 'prime':primePump();break;
+    case 'pull':case 'flip':case 'start':(rest.includes('breaker')||rest.includes('generator')||rest.includes('main'))?pullBreaker():print('Pull what?');break;
+    case 'connect':rest.includes('console')?connectConsole():(rest.includes('uplink')?connectUplink():print('Connect what — CONSOLE or UPLINK?'));break;
+    case 'set':{const m=t.match(/set\s+ip\s+(\S+)/i);setIp(m?m[1]:null);break}
+    case 'ping':ping(w[1]);break;
+    case 'listen':listen();break;
+    case 'answer':case 'reply':case 'respond':answer();break;
+    case 'drink':drinkCoffee();break;
+    case 'map':showMap();break;
+    case 'sanity':print('Sanity: '+S.sanity+'/100  ['+sanBar()+']');break;
+    case 'wait':case 'z':print('You wait. The station waits harder.');break;
+    case 'help':case '?':help();break;
+    case 'restart':location.reload();break;
+    case 'show':case 'configure':case 'conf':case 'shutdown':case 'enable':print('You\'re not at a console. (CONNECT CONSOLE, in the server room.)');break;
+    case 'xyzzy':print('A hollow voice says: "wrong layer."','dim');break;
+    case 'hello':case 'hi':print('The station does not answer. Good. Keep it that way.','dim');break;
+    case 'quit':print('There is no quit. There is only the dock, and the ice, and the barge that is coming either way.','dim');break;
+    default:print('You can\'t do that here. (HELP lists commands.)');
+  }
+  status();
+}
+
+/* ---------- input ---------- */
+input.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    const val=input.value;input.value='';
+    if(val.trim()){S.history.push(val);S.hIdx=S.history.length}
+    parse(val);
+  } else if(e.key==='ArrowUp'){
+    if(S.hIdx>0){S.hIdx--;input.value=S.history[S.hIdx];e.preventDefault()}
+  } else if(e.key==='ArrowDown'){
+    if(S.hIdx<S.history.length-1){S.hIdx++;input.value=S.history[S.hIdx]}
+    else{S.hIdx=S.history.length;input.value=''}
+    e.preventDefault();
+  }
+});
+document.getElementById('bezel').addEventListener('click',()=>input.focus());
+
+/* ---------- boot ---------- */
+const BOOT=[
+['ECHO POINT TERMINAL SERVICE v2.3','dim',150],
+['CONNECTING 300 BAUD ........ CARRIER','dim',420],
+['REMOTE HOST: ECHOPT.LIMNO.EDU','dim',300],
+['','',200],
+['  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄','title',60],
+['     T H E   D R O W N E D   S I G N A L','title',120],
+['  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄','title',60],
+['        an Echo Point MUD  //  1993','dim',400],
+['','',300],
+['February 16th. Echo Point Limnological Research Station went','',40],
+['silent eleven days ago. Six staff. No mayday, no evacuation —','',40],
+['just a network that stopped answering, then started again,','',40],
+['transmitting nothing anyone could read.','',300],
+['','',100],
+['You are the relief network technician. The charter drops you','',40],
+['and your field laptop at the dock and does not linger.','',40],
+['The maintenance barge docks in hours to patch the station into','',40],
+['the mainland fiber. Your job: have the network ready.','',400],
+['','',100],
+['Your job is about to change.','amber',500],
+['','',100],
+['Type HELP for commands. Type LOOK to begin.','dim',10]
+];
+(async function boot(){
+  input.disabled=true;
+  for(const [txt,cls,delay] of BOOT){
+    print(txt,cls||undefined);
+    await new Promise(r=>setTimeout(r,delay));
+  }
+  input.disabled=false;input.focus();
+  status();look();
+})();
+
+</script>
+</body>
+</html>
