@@ -1,5 +1,3 @@
-Here's a full README you can paste straight into GitHub's editor (click the pencil icon on your README, replace everything, commit). The ASCII banner renders in a code block so it keeps that terminal look:
-
 ````markdown
 ```
  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
