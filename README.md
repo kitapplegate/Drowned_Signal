@@ -1,15 +1,4 @@
-````markdown
-```
 ![THE DROWNED SIGNAL — an Echo Point MUD, 1993](banner.svg)
- ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
-    T H E   D R O W N E D   S I G N A L
- ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
-        an Echo Point MUD  //  1993
-
- ECHO POINT TERMINAL SERVICE v2.3
- CONNECTING 300 BAUD ........ CARRIER
- REMOTE HOST: ECHOPT.LIMNO.EDU
-```
 
 **A single-player, Lovecraftian, browser-based MUD — where the horror is the network.**
 
@@ -44,5 +33,4 @@ No install. No dependencies. One HTML file, any browser. Keyboard required.
 
 CCNA candidates: everything the switch tells you is real. Treat it
 like a lab. The lake is optional.
-```
 ````
