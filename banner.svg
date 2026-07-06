@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" role="img" aria-label="The Drowned Signal — an Echo Point MUD, 1993">
+  <defs>
+    <!-- phosphor glow -->
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="6" result="b1"/>
+      <feGaussianBlur stdDeviation="1.4" result="b2"/>
+      <feMerge>
+        <feMergeNode in="b1"/><feMergeNode in="b2"/><feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="glowSoft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glowViolet" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <!-- CRT scanlines -->
+    <pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse">
+      <rect width="4" height="4" fill="none"/>
+      <rect y="2.4" width="4" height="1.6" fill="#000" opacity="0.28"/>
+    </pattern>
+    <!-- screen background -->
+    <radialGradient id="tube" cx="50%" cy="42%" r="85%">
+      <stop offset="0%" stop-color="#08150b"/>
+      <stop offset="55%" stop-color="#040a06"/>
+      <stop offset="100%" stop-color="#010402"/>
+    </radialGradient>
+    <radialGradient id="vign" cx="50%" cy="48%" r="72%">
+      <stop offset="62%" stop-color="#000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0.82"/>
+    </radialGradient>
+    <linearGradient id="ice" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#12331d" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#12331d" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- tube -->
+  <rect width="1280" height="640" fill="url(#tube)"/>
+
+  <!-- the lake: ice line + what's under it -->
+  <g>
+    <!-- ice horizon -->
+    <line x1="60" y1="472" x2="1220" y2="472" stroke="#2a7a45" stroke-width="2" opacity="0.5" filter="url(#glowSoft)"/>
+    <line x1="60" y1="472" x2="1220" y2="472" stroke="#63f78b" stroke-width="0.8" opacity="0.7"/>
+    <rect x="60" y="472" width="1160" height="6" fill="url(#ice)"/>
+
+    <!-- the cable descending into the lake, becoming a signal -->
+    <path d="M 240 472 C 250 520, 300 540, 380 545 S 560 540, 640 552 S 900 585, 1020 560"
+          fill="none" stroke="#1e5c33" stroke-width="3" opacity="0.8" filter="url(#glowSoft)"/>
+    <!-- morse ticking along the cable -->
+    <g fill="#63f78b" opacity="0.85" filter="url(#glowSoft)">
+      <circle cx="330" cy="543" r="2.4"/>
+      <rect x="392" y="543" width="16" height="3.6" rx="1.8"/>
+      <circle cx="452" cy="546" r="2.4"/>
+      <circle cx="478" cy="547" r="2.4"/>
+      <rect x="530" y="547" width="16" height="3.6" rx="1.8"/>
+      <circle cx="596" cy="550" r="2.4"/>
+    </g>
+    <!-- the thing at the other end: a violet pulse -->
+    <circle cx="1020" cy="560" r="5" fill="#b48cff" filter="url(#glowViolet)"/>
+    <circle cx="1020" cy="560" r="14" fill="none" stroke="#b48cff" stroke-width="1" opacity="0.5" filter="url(#glowViolet)"/>
+    <circle cx="1020" cy="560" r="26" fill="none" stroke="#b48cff" stroke-width="0.7" opacity="0.25" filter="url(#glowViolet)"/>
+  </g>
+
+  <!-- boot text -->
+  <g font-family="'VT323','Courier New',monospace" fill="#1e5c33" font-size="24" letter-spacing="2" filter="url(#glowSoft)">
+    <text x="96" y="96">ECHO POINT TERMINAL SERVICE v2.3</text>
+    <text x="96" y="130">CONNECTING 300 BAUD ........ CARRIER</text>
+    <text x="96" y="164">REMOTE HOST: ECHOPT.LIMNO.EDU</text>
+  </g>
+
+  <!-- rule -->
+  <rect x="96" y="212" width="1088" height="4" fill="#63f78b" opacity="0.85" filter="url(#glowSoft)"/>
+
+  <!-- title -->
+  <g font-family="'VT323','Courier New',monospace" text-anchor="middle">
+    <text x="640" y="308" font-size="86" letter-spacing="18" fill="#63f78b" filter="url(#glow)">THE DROWNED</text>
+    <text x="640" y="398" font-size="86" letter-spacing="30" fill="#63f78b" filter="url(#glow)">S I G N A L</text>
+  </g>
+
+  <!-- rule -->
+  <rect x="96" y="430" width="1088" height="4" fill="#63f78b" opacity="0.85" filter="url(#glowSoft)"/>
+
+  <!-- subtitle -->
+  <text x="640" y="462" text-anchor="middle" font-family="'VT323','Courier New',monospace"
+        font-size="27" letter-spacing="6" fill="#2a7a45" filter="url(#glowSoft)">an ECHO POINT MUD // 1993</text>
+
+  <!-- tagline + prompt -->
+  <g font-family="'VT323','Courier New',monospace" font-size="24" letter-spacing="2">
+    <text x="96" y="586" fill="#1e5c33" filter="url(#glowSoft)">the horror is the network.</text>
+    <text x="982" y="586" fill="#63f78b" filter="url(#glowSoft)">&gt; JACK IN</text>
+    <rect x="1112" y="568" width="13" height="22" fill="#63f78b" filter="url(#glowSoft)"/>
+  </g>
+
+  <!-- scanlines + vignette on top -->
+  <rect width="1280" height="640" fill="url(#scan)"/>
+  <rect width="1280" height="640" fill="url(#vign)"/>
+</svg>
